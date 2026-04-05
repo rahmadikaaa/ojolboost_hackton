@@ -1,0 +1,210 @@
+# ============================================================
+# OjolBoost MAMS — Cloud Run Knative Service Specification
+# ============================================================
+# Spesifikasi Knative Service untuk Google Cloud Run.
+#
+# Cara deploy manual (tanpa Cloud Build):
+#   gcloud run services replace deploy/service.yaml \
+#     --region asia-southeast1
+#
+# Cara apply via gcloud:
+#   gcloud run services replace deploy/service.yaml
+#
+# CATATAN PLACEHOLDER:
+#   Ganti semua nilai yang diawali dengan "YOUR_" dengan nilai nyata
+#   sebelum men-deploy. Gunakan Secret Manager untuk nilai sensitif.
+# ============================================================
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+
+metadata:
+  # Nama service — harus konsisten dengan _SERVICE_NAME di cloudbuild.yaml
+  name: ojolboost-mams
+
+  # Region Cloud Run — Jakarta (asia-southeast1) untuk latensi optimal
+  # dengan BigQuery dan Vertex AI yang ada di region yang sama
+  labels:
+    cloud.googleapis.com/location: asia-southeast1
+
+  annotations:
+    # Referensi ke Git SHA untuk traceability deployment
+    run.googleapis.com/launch-stage: GA
+    # Client yang melakukan deployment (untuk audit log)
+    run.googleapis.com/client-name: "cloud-build"
+
+spec:
+  template:
+    metadata:
+      annotations:
+        # ── SCALING ────────────────────────────────────────────
+        # Min instance = 0: Scale to zero saat idle (hemat biaya)
+        # Catatan: Cold start ~1-2 detik (dapat diterima untuk driver app)
+        autoscaling.knative.dev/minScale: "0"
+
+        # Max instance = 10: Batas atas scale-up untuk kontrol biaya
+        # Setiap instance menangani hingga 80 concurrent requests
+        # Total kapasitas: 10 × 80 = 800 req concurrent
+        autoscaling.knative.dev/maxScale: "10"
+
+        # ── CPU ALLOCATION ─────────────────────────────────────
+        # "request-only": CPU hanya dialokasikan saat ada request masuk.
+        # Lebih hemat biaya dibanding "always-on".
+        run.googleapis.com/cpu-throttling: "true"
+
+        # ── STARTUP PROBE ──────────────────────────────────────
+        # Tunggu Flask app benar-benar siap sebelum terima traffic.
+        run.googleapis.com/startup-cpu-boost: "true"
+
+    spec:
+      # ── CONCURRENCY ──────────────────────────────────────────
+      # 80 concurrent request per instance.
+      # Optimal untuk beban kerja I/O-bound (Gunicorn gthread worker).
+      # Multi-agent orchestration: setiap request membutuhkan ~3 sub-agent calls
+      # yang berjalan paralel (asyncio) → tidak blocking thread utama.
+      containerConcurrency: 80
+
+      # ── TIMEOUT ──────────────────────────────────────────────
+      # 120 detik: toleransi untuk Vertex AI synthesis + 3 sub-agent calls paralel.
+      # Target SLA internal: < 5 detik (CLAUDE.md Seksi 7.4).
+      # 120 detik adalah batas atas untuk edge cases (Vertex AI cold start).
+      timeoutSeconds: 120
+
+      # ── SERVICE ACCOUNT ──────────────────────────────────────
+      # Dedicated service account dengan IAM roles minimal (least privilege):
+      #   - roles/bigquery.dataEditor (untuk The Auditor: INSERT + SELECT)
+      #   - roles/aiplatform.user     (untuk Vertex AI Gemini synthesis)
+      #   - roles/secretmanager.secretAccessor (untuk API keys dari Secret Manager)
+      # Ganti YOUR_PROJECT_ID dengan ID project GCP Anda.
+      serviceAccountName: "ojolboost-mams-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com"
+
+      containers:
+        - name: ojolboost-mams
+
+          # ── IMAGE ─────────────────────────────────────────────
+          # Ganti YOUR_PROJECT_ID dan YOUR_COMMIT_SHA dengan nilai aktual.
+          # Untuk production: selalu gunakan SHA spesifik, bukan :latest.
+          # Contoh: asia-southeast1-docker.pkg.dev/ojolboost-prod/ojolboost-images/ojolboost-mams:abc1234
+          image: "asia-southeast1-docker.pkg.dev/YOUR_PROJECT_ID/ojolboost-images/ojolboost-mams:YOUR_COMMIT_SHA"
+
+          # ── PORTS ─────────────────────────────────────────────
+          ports:
+            - name: http1
+              containerPort: 8080
+              protocol: TCP
+
+          # ── RESOURCE LIMITS ───────────────────────────────────
+          resources:
+            limits:
+              # 1 vCPU: cukup untuk Gunicorn 2 workers × 8 threads
+              cpu: "1"
+              # 512Mi: cukup untuk multi-agent runtime + Pydantic + BigQuery client
+              memory: "512Mi"
+            requests:
+              # Minimum yang diminta saat instance baru dibuat
+              cpu: "200m"
+              memory: "256Mi"
+
+          # ── ENVIRONMENT VARIABLES ─────────────────────────────
+          # ATURAN KEAMANAN:
+          #   - Nilai NON-SENSITIF: hardcode langsung di sini
+          #   - Nilai SENSITIF: WAJIB gunakan valueFrom.secretKeyRef (Secret Manager)
+          #   - JANGAN PERNAH hardcode API key atau token di file ini
+          env:
+            # ── Google Cloud Core ──────────────────────────────
+            - name: GOOGLE_CLOUD_PROJECT
+              # Ganti YOUR_PROJECT_ID dengan GCP Project ID Anda (misal: ojolboosttrack2)
+              value: "YOUR_PROJECT_ID"
+
+            - name: VERTEX_AI_LOCATION
+              value: "asia-southeast1"
+
+            # ── BigQuery (IMMUTABLE — CLAUDE.md Seksi 4.4) ──────
+            - name: BIGQUERY_DATASET
+              value: "ojolboosttrack2"
+
+            - name: BIGQUERY_LOCATION
+              value: "asia-southeast1"
+
+            # ── MCP Server ─────────────────────────────────────
+            - name: MCP_SERVER_PORT
+              value: "8080"
+
+            # ── Google Calendar ─────────────────────────────────
+            - name: GOOGLE_CALENDAR_ID
+              # Ganti dengan Calendar ID pengguna (misal: user@gmail.com)
+              value: "YOUR_GOOGLE_CALENDAR_ID"
+
+            # ── Runtime Constraints (CLAUDE.md Seksi 7.4) ───────
+            - name: MAX_AGENT_LATENCY_MS
+              value: "5000"
+
+            # ── Logging ─────────────────────────────────────────
+            - name: LOG_LEVEL
+              value: "INFO"
+
+            - name: LOG_FORMAT
+              value: "json"
+
+            # ── SENSITIF: dari Google Secret Manager ─────────────
+            # Format: projects/PROJECT_ID/secrets/SECRET_NAME/versions/latest
+            # Pastikan secret sudah dibuat via:
+            #   gcloud secrets create ojolboost-openweather-api-key \
+            #     --replication-policy=automatic
+            #   echo -n "your_api_key" | gcloud secrets versions add \
+            #     ojolboost-openweather-api-key --data-file=-
+
+            - name: OPENWEATHER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: "ojolboost-openweather-api-key"
+                  key: "latest"
+
+            - name: GOOGLE_KEEP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: "ojolboost-google-keep-token"
+                  key: "latest"
+
+            - name: GEMINI_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: "ojolboost-gemini-model"
+                  key: "latest"
+
+            - name: GOOGLE_ACCOUNT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: "ojolboost-google-account-email"
+                  key: "latest"
+
+          # ── LIVENESS PROBE ────────────────────────────────────
+          # Cek apakah container masih hidup setelah startup.
+          # Jika gagal 3x berturut-turut → Cloud Run restart container.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          # ── STARTUP PROBE ─────────────────────────────────────
+          # Beri waktu Flask/Gunicorn untuk startup sebelum traffic masuk.
+          # Maksimum menunggu: 10s × 12 = 120 detik startup time.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 12
+            timeoutSeconds: 5
+
+  # ── TRAFFIC ────────────────────────────────────────────────
+  # 100% traffic ke revision terbaru (latest).
+  # Untuk canary deployment: split traffic antar revision di sini.
+  traffic:
+    - percent: 100
+      latestRevision: true
