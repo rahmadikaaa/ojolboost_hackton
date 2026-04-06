@@ -94,6 +94,8 @@ ROUTING_RULES: dict[str, dict[IntentType, list[str]]] = {
             "total hari ini", "berapa hari ini", "berapa tadi",
             "saldo", "udah berapa", "sudah berapa", "hasil hari ini",
             "laporan harian", "laporan keuangan",
+            # Sugesti button: rekap data tarikan
+            "rekap tarikan", "rekap data", "data tarikan", "upload tarikan",
         ],
         IntentType.GET_DAILY_STATE: [
             "status hari ini", "kondisi sekarang", "posisi keuangan",
@@ -103,7 +105,10 @@ ROUTING_RULES: dict[str, dict[IntentType, list[str]]] = {
             "kejar target", "butuh duit", "hitung bersih", "hitungan bersih",
             "kalkulasi trip", "berapa trip", "buat beli", "target harian",
             "target uang", "dapet berapa trip", "narik berapa",
-            "ngejar target", "hitung kotor", "kalkulasi penghasilan"
+            "ngejar target", "hitung kotor", "kalkulasi penghasilan",
+            # Sugesti button: target bersih / pendapatan
+            "target bersih", "target pendapatan", "hitung target",
+            "pengen dapet", "mau dapet", "target hari ini",
         ],
     },
 
@@ -123,6 +128,9 @@ ROUTING_RULES: dict[str, dict[IntentType, list[str]]] = {
             "besok jam", "hari ini jam", "nanti jam",
             "buatin pengingat", "catat jadwal", "reservasi waktu",
             "jangan lupa", "bikin penginat",
+            # Sugesti button: servis kendaraan / jadwal rutin
+            "servis motor", "servis kendaraan", "ganti oli", "jadwal servis",
+            "reminder servis", "service reminder",
         ],
     },
 
@@ -131,6 +139,9 @@ ROUTING_RULES: dict[str, dict[IntentType, list[str]]] = {
             "catat ini", "simpan ini", "tulis ini",
             "catat catatan", "bikin catatan", "buat catatan",
             "save note", "note ini", "arsip",
+            # Sugesti button: daftar belanja / catatan
+            "daftar belanja", "belanja apa", "keperluan", "list belanja",
+            "mau beli", "perlu beli", "kebutuhan",
         ],
         IntentType.SEARCH_NOTE: [
             "cari catatan", "temuin catatan", "ada catatan",
@@ -146,9 +157,64 @@ ROUTING_RULES: dict[str, dict[IntentType, list[str]]] = {
             "ngetem di mana", "pindah ke mana",
             "permintaan tinggi", "demand mana", "peluang di mana",
             "opportunity", "analisis permintaan",
+            # Sugesti button: titik gacor / rekomendasi mangkal
+            "titik gacor", "titik ramai", "mangkal di mana", "lokasi gacor",
+            "rekomendasi mangkal", "spot gacor", "zona gacor",
+            "area gacor", "mana yang gacor",
         ],
     },
 }
+
+
+# ============================================================
+# STRONG SIGNAL PATTERNS — Context Locking
+# Jika pola ini cocok, routing LANGSUNG dikunci ke 1 agen.
+# Tidak ada fuzzy matching, tidak ada cross-talk.
+# Format: { pattern_substring: (agent_name, IntentType) }
+# ============================================================
+
+STRONG_SIGNAL_LOCK: list[tuple[str, str, IntentType]] = [
+    # Target Pendapatan / Hitung Bersih → The Auditor (Target Hunter)
+    ("target bersih",    "The Auditor", IntentType.TARGET_REVERSE_CALC),
+    ("hitung bersih",    "The Auditor", IntentType.TARGET_REVERSE_CALC),
+    ("target pendapatan","The Auditor", IntentType.TARGET_REVERSE_CALC),
+    ("kejar target",     "The Auditor", IntentType.TARGET_REVERSE_CALC),
+    ("ngejar target",    "The Auditor", IntentType.TARGET_REVERSE_CALC),
+    ("mau dapet",        "The Auditor", IntentType.TARGET_REVERSE_CALC),
+    ("pengen dapet",     "The Auditor", IntentType.TARGET_REVERSE_CALC),
+    ("berapa trip",      "The Auditor", IntentType.TARGET_REVERSE_CALC),
+    ("narik berapa trip","The Auditor", IntentType.TARGET_REVERSE_CALC),
+
+    # Titik Gacor / Rekomendasi Mangkal → Demand Analytics
+    ("titik gacor",      "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("lokasi gacor",     "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("zona gacor",       "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("area gacor",       "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("spot gacor",       "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("mangkal di mana",  "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("rekomendasi mangkal", "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("hotspot",          "Demand Analytics", IntentType.ANALYZE_DEMAND),
+
+    # Rekap Data Tarikan → The Auditor (Laporan)
+    ("rekap tarikan",    "The Auditor", IntentType.GET_FINANCIAL_REPORT),
+    ("rekap data",       "The Auditor", IntentType.GET_FINANCIAL_REPORT),
+    ("data tarikan",     "The Auditor", IntentType.GET_FINANCIAL_REPORT),
+    ("upload tarikan",   "The Auditor", IntentType.GET_FINANCIAL_REPORT),
+
+    # Reminder / Jadwal Servis → The Planner
+    ("jadwal servis",    "The Planner", IntentType.CREATE_SCHEDULE),
+    ("reminder servis",  "The Planner", IntentType.CREATE_SCHEDULE),
+    ("servis motor",     "The Planner", IntentType.CREATE_SCHEDULE),
+    ("ganti oli",        "The Planner", IntentType.CREATE_SCHEDULE),
+    ("service reminder", "The Planner", IntentType.CREATE_SCHEDULE),
+
+    # Daftar Belanja / Catatan → The Archivist
+    ("daftar belanja",   "The Archivist", IntentType.SAVE_NOTE),
+    ("list belanja",     "The Archivist", IntentType.SAVE_NOTE),
+    ("mau beli",         "The Archivist", IntentType.SAVE_NOTE),
+    ("perlu beli",       "The Archivist", IntentType.SAVE_NOTE),
+    ("kebutuhan belanja","The Archivist", IntentType.SAVE_NOTE),
+]
 
 
 # ============================================================
@@ -253,24 +319,51 @@ class IntentAnalyzer:
     Menganalisis input natural dari pengguna dan mendeteksi
     satu atau lebih intent yang harus ditangani sub-agen.
 
-    Strategi: Keyword matching deterministik (bukan AI probabilistik).
-    Setiap intent yang terdeteksi akan menghasilkan satu DetectedIntent.
+    Strategi dua tahap:
+    1. STRONG SIGNAL CHECK (Context Lock) — cek STRONG_SIGNAL_LOCK dulu.
+       Jika cocok, langsung kunci ke 1 agen. Tidak ada cross-talk.
+    2. FUZZY ROUTING — fallback jika tidak ada strong signal.
+       Scan semua ROUTING_RULES, bisa menghasilkan multi-agent.
     """
 
     def analyze(self, user_input: str) -> List[DetectedIntent]:
         """
         Analisis teks input dan kembalikan list intent yang terdeteksi.
 
-        Args:
-            user_input: Teks natural dari pengguna.
-
         Returns:
-            List[DetectedIntent] — bisa lebih dari satu jika multi-task.
+            List[DetectedIntent] — selalu 1 elemen jika strong signal cocok.
+                                   Bisa lebih dari satu jika multi-task (fuzzy).
                                    Kosong jika tidak ada intent yang dikenal.
         """
         text_lower = user_input.lower()
+
+        # ══════════════════════════════════════════════════
+        # TAHAP 1: STRONG SIGNAL — Context Lock
+        # Jika pola kuat terdeteksi, langsung lock ke 1 agen.
+        # ══════════════════════════════════════════════════
+        for pattern, agent_name, intent_type in STRONG_SIGNAL_LOCK:
+            if pattern in text_lower:
+                context = self._extract_context(user_input, intent_type)
+                intent = DetectedIntent(
+                    intent_type=intent_type,
+                    target_agent=agent_name,
+                    extracted_context=context,
+                    raw_excerpt=pattern,
+                    confidence="high",  # Strong signal = selalu high confidence
+                )
+                logger.log_agent_event(
+                    f"STRONG_SIGNAL_LOCK: '{pattern}' → {agent_name} "
+                    f"({intent_type.value}) [CONTEXT LOCKED]",
+                    agent_name="Bang Jek",
+                )
+                return [intent]  # LANGSUNG return — tidak scan lebih lanjut
+
+        # ══════════════════════════════════════════════════
+        # TAHAP 2: FUZZY ROUTING — Standard keyword scan
+        # (hanya jalan jika tidak ada strong signal)
+        # ══════════════════════════════════════════════════
         detected: List[DetectedIntent] = []
-        seen_agents: set[str] = set()  # Hindari duplikasi agen untuk intent serupa
+        seen_agents: set[str] = set()  # Hindari duplikasi agen
 
         for agent_name, intent_map in ROUTING_RULES.items():
             for intent_type, keywords in intent_map.items():
