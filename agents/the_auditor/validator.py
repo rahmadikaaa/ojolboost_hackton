@@ -104,11 +104,21 @@ def verify_and_clean_query(
         f"{sql.strip()[:120]}{'...' if len(sql) > 120 else ''}"
     )
 
-    # ---- Panggil L3: AuditorValidator.enforce() ----
+    # ---- Panggil L3: AuditorValidator.validate_query() ----
+    import re as _re
+    _all_refs = _re.findall(r"`([^`]+)[.]([^`]+)`", sql)
+    if _all_refs:
+        _dataset, _table = _all_refs[0]
+    else:
+        _plain = _re.search(r"\b(ojolboosttrack2)[.]([a-z_]+)\b", sql)
+        _dataset = _plain.group(1) if _plain else "ojolboosttrack2"
+        _table = _plain.group(2) if _plain else "trx_daily_income"
+
     try:
-        validation_result: ValidationResultSchema = _auditor_validator.enforce(
+        validation_result: ValidationResultSchema = AuditorValidator.validate_query(
             sql=sql,
-            context={"operation": operation_context or "unknown"},
+            dataset=_dataset,
+            table=_table,
         )
     except Exception as e:
         # Error tak terduga dari validator — fail-safe: blokir

@@ -46,6 +46,7 @@ class IntentType(str, Enum):
     ANALYZE_DEMAND = "analyze_demand"
     GET_FINANCIAL_REPORT = "get_financial_report"
     GET_DAILY_STATE = "get_daily_state"
+    TARGET_REVERSE_CALC = "target_reverse_calc"
     UNKNOWN = "unknown"
 
 
@@ -97,6 +98,12 @@ ROUTING_RULES: dict[str, dict[IntentType, list[str]]] = {
         IntentType.GET_DAILY_STATE: [
             "status hari ini", "kondisi sekarang", "posisi keuangan",
             "update state", "state hari ini",
+        ],
+        IntentType.TARGET_REVERSE_CALC: [
+            "kejar target", "butuh duit", "hitung bersih", "hitungan bersih",
+            "kalkulasi trip", "berapa trip", "buat beli", "target harian",
+            "target uang", "dapet berapa trip", "narik berapa",
+            "ngejar target", "hitung kotor", "kalkulasi penghasilan"
         ],
     },
 
@@ -215,6 +222,26 @@ def _extract_service_type(text: str) -> Optional[str]:
     if any(w in text_lower for w in ["ride", "motor", "ojek", "antar jemput"]):
         return "ride"
     return None
+
+
+def _extract_costs(text: str) -> List[dict]:
+    """Ekstrak item biaya untuk reverse calc."""
+    text_lower = text.lower()
+    costs = []
+    if "bensin" in text_lower or "bbm" in text_lower or "pertalite" in text_lower:
+        costs.append({"item": "bensin", "type": "variable"})
+    if "roko" in text_lower or "udud" in text_lower:
+        costs.append({"item": "rokok", "type": "fixed"})
+    if "kopi" in text_lower or "ngopi" in text_lower or "makan" in text_lower:
+        costs.append({"item": "kopi", "type": "fixed"})
+    return costs
+
+
+def _extract_calc_mode(text: str) -> str:
+    """Ekstrak apakah driver minta margin kotor atau bersih."""
+    if "bersih" in text.lower() or "net" in text.lower():
+        return "NET"
+    return "GROSS"
 
 
 # ============================================================
@@ -336,6 +363,14 @@ class IntentAnalyzer:
             elif any(w in text.lower() for w in ["bulan", "monthly", "30 hari"]):
                 context["report_period"] = "monthly"
 
+        elif intent_type == IntentType.TARGET_REVERSE_CALC:
+            amount = _extract_amount(text)
+            if amount:
+                context["amount"] = amount
+            context["costs"] = _extract_costs(text)
+            context["calc_mode"] = _extract_calc_mode(text)
+            context["raw_input"] = text
+
         return context
 
 
@@ -447,6 +482,10 @@ class TaskPlanner:
                 "Analisis data permintaan zona saat ini dari BigQuery. "
                 "Zone hint: '{zone}'. Kembalikan hotzone dan rekomendasi."
             ),
+            IntentType.TARGET_REVERSE_CALC: (
+                "Kalkulasi Target Reverse. Target amount: {amount}. "
+                "Calculation Mode: {calc_mode}. Extracted Costs: {costs}. Raw input: '{raw}'"
+            ),
             IntentType.UNKNOWN: "Tangani permintaan: '{raw}'",
         }
 
@@ -462,6 +501,8 @@ class TaskPlanner:
                 location=ctx.get("location", "Jakarta"),
                 period=ctx.get("report_period", "daily"),
                 datetime=ctx.get("datetime_hint", "tidak disebutkan"),
+                calc_mode=ctx.get("calc_mode", "GROSS"),
+                costs=ctx.get("costs", []),
             )
         except KeyError:
             return f"Tangani intent '{intent.intent_type.value}' berdasarkan input: {user_input[:150]}"
@@ -469,6 +510,7 @@ class TaskPlanner:
     def _determine_priority(self, intent_type: IntentType) -> int:
         """Tentukan prioritas 1-10 berdasarkan tipe intent."""
         priority_map = {
+            IntentType.TARGET_REVERSE_CALC: 9,   # Kompleks dan penting
             IntentType.RECORD_TRANSACTION: 8,    # Keuangan — prioritas tinggi
             IntentType.GET_FINANCIAL_REPORT: 7,
             IntentType.CHECK_WEATHER: 9,          # Real-time data — waktu kritis

@@ -163,6 +163,12 @@ class TheAuditorAgent:
         ):
             return self._handle_record_transaction(ctx, driver_id)
 
+        # --- Intent: Target Reverse Calc (Target Hunter) ---
+        if intent == "target_reverse_calc" or any(
+            w in task_lower for w in ["kejar target", "hitung bersih", "kalkulasi"]
+        ):
+            return self._handle_target_hunter(ctx, driver_id)
+
         # --- Intent: Laporan keuangan ---
         if intent == "get_financial_report" or any(
             w in task_lower for w in ["laporan", "rekap", "report", "summary", "berapa"]
@@ -240,6 +246,100 @@ class TheAuditorAgent:
             tool_fn=auditor_tools.record_transaction,
             transaction=transaction,
         )
+
+    def _handle_target_hunter(
+        self,
+        ctx: Dict[str, Any],
+        driver_id: str,
+    ) -> Dict[str, Any]:
+        """Layer 3-5: Cost Engine, Calculator, & Validation for Target Hunter."""
+        import math
+        
+        target_amount = float(ctx.get("amount") or 0)
+        if target_amount <= 0:
+            raise ValueError("Target amount tidak valid untuk kalkulasi target hunter.")
+            
+        calc_mode = ctx.get("calc_mode", "GROSS")
+        raw_costs = ctx.get("costs", [])
+        
+        # Panggil tool untuk Layer 2 (Data Retrieval)
+        # _call_tool memastikan penjagaan L3 guardrail
+        medians = self._call_tool(
+            tool_name="get_historical_medians",
+            parameters={"driver_id": driver_id},
+            tool_fn=auditor_tools.get_historical_medians,
+            driver_id=driver_id
+        )
+        
+        # Layer 3: Cost Engine
+        fixed_cost = 0.0
+        for cost in raw_costs:
+            if cost["type"] == "fixed":
+                if cost["item"] == "rokok":
+                    fixed_cost += 20000.0
+                elif cost["item"] == "kopi":
+                    fixed_cost += 8000.0
+                else:
+                    fixed_cost += 10000.0
+                    
+        has_bensin = any(c["item"] == "bensin" for c in raw_costs)
+        base_variable_cost = medians["komisi_per_trip"]
+        if has_bensin:
+            base_variable_cost += 1600.0 # estimasi bensin per trip
+            
+        # Layer 4: The Calculator
+        if calc_mode == "NET":
+            total_needed = target_amount + fixed_cost
+        else:
+            total_needed = target_amount
+            
+        avg_argo = medians["avg_argo"]
+        net_per_trip = avg_argo - base_variable_cost
+        
+        trip_minimum = math.ceil(total_needed / net_per_trip)
+        cancel_rate = medians["cancel_rate"]
+        real_orders_needed = math.ceil(trip_minimum / (1 - cancel_rate))
+        
+        # Estimasi waktu
+        total_time_mins = real_orders_needed * medians.get("avg_cycle_time", 35)
+        buffer_time_mins = total_time_mins * 1.15
+        
+        # Layer 5: Validation
+        historic_daily_max = medians["avg_trips_per_day"] * 1.8 
+        if real_orders_needed > max(historic_daily_max, 12):
+            feasibility = "ABOVE NORMAL"
+        elif buffer_time_mins > 540: # > 9 hours
+            feasibility = "TIGHT"
+        else:
+            feasibility = "FEASIBLE"
+            
+        logger.info(f"[The Auditor] Target Hunter kalkulasi selesai: {trip_minimum} trips needed.")
+            
+        return {
+            "intent": "TARGET_REVERSE_CALC",
+            "target_amount": target_amount,
+            "calc_mode": calc_mode,
+            "cost_breakdown": {
+                "fixed_cost_total": fixed_cost,
+                "variable_cost_per_trip": base_variable_cost,
+                "bensin_included": has_bensin
+            },
+            "math_result": {
+                "minimum_trips": trip_minimum,
+                "orders_to_accept": real_orders_needed,
+                "net_per_trip": net_per_trip,
+                "total_needed": total_needed
+            },
+            "time_estimation": {
+                "total_minutes": buffer_time_mins,
+                "hours": int(buffer_time_mins // 60),
+                "minutes": int(buffer_time_mins % 60)
+            },
+            "validation": {
+                "feasibility": feasibility,
+                "historic_daily_capacity": medians["avg_trips_per_day"]
+            }
+        }
 
     # ----------------------------------------------------------
     # GUARDRAIL-WRAPPED TOOL CALL

@@ -573,3 +573,96 @@ def update_daily_state(
         "operation": "STATE_MERGE",
         "anomaly_detected": anomaly_detected,
     }
+
+
+# ============================================================
+# TOOL 5: get_historical_medians (Target Hunter)
+# Referensi: deep_dive.txt Layer 2
+# ============================================================
+
+def get_historical_medians(driver_id: str = "default_driver") -> Dict[str, Any]:
+    """
+    Tarik data historis dari BigQuery untuk kalkulasi Target Hunter.
+    Jika BigQuery gagal atau data belum ada, fallback ke defaults dari deep_dive.txt.
+    """
+    # Defaults dari deep_dive.txt — dipakai jika BQ tidak tersedia
+    DEFAULTS = {
+        "avg_argo": 14500.0,
+        "avg_argo_method": "median_trimmed_default",
+        "komisi_rate": 0.11,
+        "komisi_per_trip": 1595.0,
+        "cancel_rate": 0.08,
+        "avg_trips_per_day": 7.0,
+        "avg_cycle_time": 35,
+    }
+
+    try:
+        from google.cloud import bigquery
+
+        sql = f"""
+            SELECT
+                (SELECT approx_quantiles(amount, 100)[OFFSET(50)]
+                 FROM `{DS}.trx_daily_income`
+                 WHERE driver_id = @driver_id AND status = 'recorded'
+                   AND amount BETWEEN 5000 AND 200000) AS median_argo,
+
+                COUNTIF(status = 'cancelled' OR status = 'dibatalkan')
+                    / NULLIF(COUNT(*), 0) AS cancel_rate,
+
+                COUNT(*) / NULLIF(COUNT(DISTINCT DATE(transaction_date)), 0)
+                    AS avg_trips_per_day
+
+            FROM `{DS}.trx_daily_income`
+            WHERE driver_id = @driver_id
+        """
+
+        # ════ L3 GATE ════
+        cleaned = verify_and_clean_query(sql, operation_context="get_historical_medians:SELECT")
+
+        rows = _execute_validated_query(
+            cleaned,
+            params=[bigquery.ScalarQueryParameter("driver_id", "STRING", driver_id)],
+            operation_context="get_historical_medians:SELECT",
+        )
+
+        row = rows[0] if rows else {}
+
+        median_argo = float(row.get("median_argo") or DEFAULTS["avg_argo"])
+        cancel_rate = float(row.get("cancel_rate") or DEFAULTS["cancel_rate"])
+        avg_trips_per_day = float(row.get("avg_trips_per_day") or DEFAULTS["avg_trips_per_day"])
+        komisi_rate = 0.11
+        komisi_per_trip = median_argo * komisi_rate
+
+        source = "bigquery"
+
+    except Exception as e:
+        # Fallback ke defaults — fitur tetap jalan meski BQ tidak tersedia
+        logger.warning(
+            f"[The Auditor] BigQuery tidak tersedia untuk get_historical_medians: {e}. "
+            f"Menggunakan defaults dari deep_dive.txt."
+        )
+        median_argo = DEFAULTS["avg_argo"]
+        cancel_rate = DEFAULTS["cancel_rate"]
+        avg_trips_per_day = DEFAULTS["avg_trips_per_day"]
+        komisi_rate = DEFAULTS["komisi_rate"]
+        komisi_per_trip = DEFAULTS["komisi_per_trip"]
+        source = "default_deep_dive"
+
+    logger.info(
+        f"[The Auditor] Historical medians ({source}): "
+        f"median_argo=Rp{median_argo:,.0f}, cancel_rate={cancel_rate*100:.1f}%, "
+        f"avg_trips={avg_trips_per_day:.1f}"
+    )
+
+    return {
+        "avg_argo": median_argo,
+        "avg_argo_method": "median_trimmed",
+        "komisi_rate": komisi_rate,
+        "komisi_per_trip": komisi_per_trip,
+        "cancel_rate": cancel_rate,
+        "avg_trips_per_day": avg_trips_per_day,
+        "avg_cycle_time": 35,
+        "data_source": source,
+    }
+
+

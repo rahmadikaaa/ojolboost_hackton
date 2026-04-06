@@ -38,7 +38,7 @@ class PreToolUseHook(BaseHook):
         "Environmental": {"get_current_weather", "get_weather_forecast"},
         "The Planner": {"create_calendar_event", "create_task_reminder", "list_upcoming_events"},
         "The Archivist": {"save_note", "search_notes", "list_notes"},
-        "The Auditor": {"insert_transaction", "query_financial_report", "get_daily_state"},
+        "The Auditor": {"record_transaction", "get_financial_report", "get_daily_state", "update_daily_state", "get_historical_medians"},
     }
 
     def pre_tool_use(

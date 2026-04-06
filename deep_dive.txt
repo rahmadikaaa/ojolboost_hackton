@@ -1,0 +1,609 @@
+
+
+# Deep Dive: Cara Model Bekerja Step-by-Step
+
+## Gambaran Besar Dulu
+
+Intinya model ini bekerja kayak **otak yang punya beberapa bagian**, masing-masing punya tugas spesifik. Satu input dari lo → dipecah → diolah berlapis → keluar jawaban matang.
+
+---
+
+## LAYER 1: NATURAL LANGUAGE UNDERSTANDING (NLU)
+
+### Apa yang Terjadi di Otak Model Saat Lo Ngetik
+
+Input lo:
+> *"bang jek, gue mau ngejar target 100ribu buat beli susu. berapa ya trip yg harus gue jalanin? hitung bersih ya. soalnya ada bensin dan roko kopi"*
+
+Model **gak baca ini sebagai satu kalimat**. Dia **memecah jadi token-token** dan mencari **sinyal makna**:
+
+```
+TOKEN ANALYSIS:
+═══════════════════════════════════════════════════════
+
+"bang jek"
+ └─ SINYAL: Persona trigger → aktifkan mode "Bang Jek"
+    Model tahu harus jawab dengan gaya sopir ojol
+    yang data-driven
+
+"gue mau ngejar target"
+ └─ SINYAL: Intent = GOAL_SEEKING
+    Bukan nanya saldo
+    Bukan nanya proyeksi pasif
+    Ini AKTIF → lo punya angka yang mau dicapai
+
+"100ribu"
+ └─ SINYAL: Parameter AMOUNT = 100.000
+    Model convert otomatis:
+    "100ribu" → 100.000
+    "100rb"   → 100.000
+    "100k"    → 100.000
+    "seratus" → 100.000
+    Semua ditangkap sama
+
+"buat beli susu"
+ └─ SINYAL: Context tag = KEBUTUHAN_PRIMER
+    Ini bukan sekadar hiasan
+    Model bisa pake ini buat:
+    - Urgency level (susu = penting, bukan mau seneng2)
+    - Tone jawaban (lebih supportive)
+    - TIDAK mengubah kalkulasi angka
+
+"berapa ya trip yg harus gue jalanin"
+ └─ SINYAL: Output format = TRIP_COUNT
+    Lo mau jawaban dalam bentuk JUMLAH TRIP
+    Bukan dalam bentuk rupiah
+    Bukan dalam bentuk jam
+
+"hitung bersih ya"
+ └─ SINYAL: Calculation mode = NET
+    Ini KRITIS
+    Bedanya:
+    
+    KOTOR (GROSS):
+    Target ÷ argo = selesai
+    
+    BERSIH (NET):
+    Target + semua biaya ÷ (argo - biaya per trip)
+    Jauh lebih kompleks
+
+"soalnya ada bensin dan roko kopi"
+ └─ SINYAL: Cost items = [BENSIN, ROKOK, KOPI]
+    Model harus ITEMIZE biaya
+    Setiap item punya estimasi berbeda:
+    - Bensin  → VARIABLE cost (tergantung jumlah trip)
+    - Rokok   → FIXED cost (per sesi narik)
+    - Kopi    → FIXED cost (per sesi narik)
+```
+
+### Hasil Akhir Layer 1
+
+```
+┌─────────────────────────────────────────────────┐
+│            PARSED INTENT OBJECT                  │
+├─────────────────────────────────────────────────┤
+│                                                  │
+│  {                                               │
+│    persona    : "bang_jek",                      │
+│    intent     : "TARGET_REVERSE_CALC",           │
+│    amount     : 100000,                          │
+│    context    : "beli susu",                     │
+│    urgency    : "high",                          │
+│    calc_mode  : "NET",                           │
+│    output     : "TRIP_COUNT",                    │
+│    costs      : [                                │
+│      { item: "bensin", type: "variable" },       │
+│      { item: "rokok",  type: "fixed" },          │
+│      { item: "kopi",   type: "fixed" }           │
+│    ],                                            │
+│    data_needed: [                                │
+│      "avg_argo",                                 │
+│      "avg_komisi",                               │
+│      "cancel_rate",                              │
+│      "productive_hours",                         │
+│      "avg_trip_duration"                         │
+│    ]                                             │
+│  }                                               │
+│                                                  │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## LAYER 2: DATA RETRIEVAL ENGINE
+
+### Model Nyari Data yang Dibutuhin
+
+Sekarang model tahu **apa yang ditanya**. Tapi dia butuh **data buat ngitung**. Di sinilah data historis lo masuk.
+
+```
+DATA RETRIEVAL PROCESS:
+═══════════════════════════════════════════════════════
+
+QUERY: "avg_argo"
+SOURCE: Data trip historis lo (220+ entries)
+METHOD:
+  
+  Step 1 - Kumpulin semua nilai "Tunai" dari trip valid
+  
+  06.04 → Rp 14.100
+  06.04 → Rp 14.300
+  06.04 → Rp 21.400
+  05.04 → Rp 14.500
+  04.04 → Rp 19.300
+  04.04 → Rp 11.200
+  04.04 → Rp 11.200
+  04.04 → Rp 17.900
+  04.04 → Rp 12.400
+  ...
+  (200+ data points)
+  
+  Step 2 - Buang OUTLIER
+  
+  Trip Rp 101.000 (Bintaro → Bogor)  → OUTLIER, buang
+  Trip Rp 71.800  (trip sangat jauh)  → OUTLIER, buang
+  Trip Rp 6.300   (trip aneh pendek)  → OUTLIER, buang
+  
+  Kenapa dibuang?
+  Karena outlier bikin rata-rata MISLEADING
+  Lo gak bisa expect dapet trip Bogor tiap hari
+  
+  Step 3 - Hitung MEAN dan MEDIAN
+  
+  MEAN (rata-rata)  : Rp 17.847
+  MEDIAN (tengah)   : Rp 14.500
+  
+  Kenapa dua-duanya?
+  
+  MEAN   = kena pengaruh trip mahal
+           (beberapa trip 30rb+ naikin rata-rata)
+  
+  MEDIAN = angka yang PALING SERING lo dapet
+           (realita di lapangan)
+  
+  Step 4 - Pilih yang mana?
+  
+  Untuk TARGET HUNTER → pakai MEDIAN
+  Kenapa? Karena lo butuh angka KONSERVATIF
+  Lo mau PASTI dapet Rp 100rb
+  Bukan "mungkin" dapet Rp 100rb
+  
+  ┌─────────────────────────────┐
+  │ SELECTED: Rp 14.500/trip   │
+  │ (median - lebih aman)      │
+  └─────────────────────────────┘
+```
+
+```
+QUERY: "avg_komisi"
+SOURCE: Data komisi dari trip lo
+
+  06.04 → Rp 1.692
+  06.04 → Rp 1.716
+  06.04 → Rp 2.568
+  05.04 → Rp 1.740
+  04.04 → Rp 2.316
+  04.04 → Rp   996
+  04.04 → Rp   996
+  ...
+  
+  CATATAN PENTING:
+  Banyak trip komisinya FLAT di Rp 996
+  Ini kemungkinan TARIF MINIMUM komisi dari app
+  
+  Median Komisi : Rp 1.299
+  
+  Tapi gue juga hitung RASIO komisi:
+  Komisi ÷ Argo = rata-rata 10-12%
+  
+  ┌─────────────────────────────┐
+  │ KOMISI RATE : 11%           │
+  │ Per trip Rp 14.500          │
+  │ = Rp 1.595 komisi           │
+  └─────────────────────────────┘
+```
+
+```
+QUERY: "cancel_rate"
+SOURCE: Hitung trip batal vs total
+
+  Total entries     : ~220
+  Status "Dibatalkan": ~18
+  
+  Cancel rate = 18 ÷ 220 = 8.18%
+  
+  ┌─────────────────────────────┐
+  │ CANCEL RATE : 8%            │
+  └─────────────────────────────┘
+```
+
+```
+QUERY: "productive_hours" & "avg_trip_duration"
+SOURCE: Timestamp data lo
+
+  Trip paling awal  : 08:44
+  Trip paling akhir  : 23:46
+  Peak concentration : 17:00 - 22:00
+  
+  Rata-rata GAP antar trip: 25-40 menit
+  (ini termasuk waktu jemput + antar + cari order baru)
+  
+  ┌─────────────────────────────────┐
+  │ AVG CYCLE TIME : 35 menit/trip  │
+  │ (order masuk → selesai →        │
+  │  order berikutnya masuk)        │
+  └─────────────────────────────────┘
+```
+
+### Hasil Akhir Layer 2
+
+```
+┌─────────────────────────────────────────────────┐
+│            DATA OBJECT (Siap Diolah)             │
+├─────────────────────────────────────────────────┤
+│                                                  │
+│  {                                               │
+│    avg_argo          : 14500,                    │
+│    avg_argo_method   : "median_trimmed",         │
+│    komisi_rate       : 0.11,                     │
+│    komisi_per_trip   : 1595,                     │
+│    cancel_rate       : 0.08,                     │
+│    avg_cycle_time    : 35,    // menit            │
+│    peak_hours        : [17,18,19,20,21,22],      │
+│    avg_trip_distance : 6.5,   // km estimasi     │
+│  }                                               │
+│                                                  │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## LAYER 3: COST ENGINE
+
+### Ngitung Semua Biaya
+
+```
+COST CALCULATION:
+═══════════════════════════════════════════════════════
+
+ITEM 1: BENSIN (Variable Cost)
+═══════════════════════════════
+  
+  Tipe    : VARIABLE → berubah sesuai jumlah trip
+  
+  Cara hitung:
+  Avg jarak per trip        : 6.5 km
+  Konsumsi BBM motor matic  : 1 liter per 40 km
+  Harga Pertalite            : Rp 10.000/liter
+  
+  Bensin per trip = (6.5 ÷ 40) × 10.000
+                  = 0.1625 × 10.000
+                  = Rp 1.625
+                  
+  Dibulatkan      = Rp 1.600/trip
+  
+  Kenapa VARIABLE?
+  Kalau lo narik 5 trip  → bensin Rp 8.000
+  Kalau lo narik 10 trip → bensin Rp 16.000
+  Berubah proporsional
+
+
+ITEM 2: ROKOK (Fixed Cost)
+═══════════════════════════
+  
+  Tipe    : FIXED → mau narik 1 trip atau 20 trip
+                     lo tetep ngerokok segitu
+  
+  Estimasi default      : Rp 20.000/sesi narik
+  
+  Kenapa Rp 20.000?
+  Harga rokok 1 bungkus : Rp 20.000 - 30.000
+  Asumsi 1 bungkus per sesi
+  
+  ┌────────────────────────────────────────┐
+  │ NOTE: Angka ini BISA DI-OVERRIDE      │
+  │ Kalau driver bilang "rokok gue 35rb"  │
+  │ model langsung ganti ke 35.000        │
+  └────────────────────────────────────────┘
+
+
+ITEM 3: KOPI (Fixed Cost)  
+═════════════════════════
+  
+  Tipe    : FIXED
+  
+  Estimasi default      : Rp 8.000/sesi
+  
+  Range umum:
+  Kopi sachet warung    : Rp 3.000 - 5.000
+  Es kopi kekinian      : Rp 15.000 - 18.000
+  Kopi + gorengan       : Rp 8.000 - 12.000
+  
+  Default = Rp 8.000 (kopi warung + snack)
+```
+
+### Cost Summary
+
+```
+┌─────────────────────────────────────────────────┐
+│              COST STRUCTURE                      │
+├─────────────────────────────────────────────────┤
+│                                                  │
+│  FIXED COSTS (per sesi narik):                   │
+│  ├─ Rokok                    : Rp 20.000         │
+│  └─ Kopi                     : Rp  8.000         │
+│  Total Fixed                 : Rp 28.000         │
+│                                                  │
+│  VARIABLE COSTS (per trip):                      │
+│  ├─ Bensin                   : Rp  1.600         │
+│  └─ Komisi app (11%)         : Rp  1.595         │
+│  Total Variable per trip     : Rp  3.195         │
+│                                                  │
+│  NET INCOME per trip:                            │
+│  Argo (14.500) - Variable (3.195) = Rp 11.305   │
+│                                                  │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## LAYER 4: THE CALCULATOR (Inti Rumus)
+
+### Ini Bagian Paling Penting
+
+```
+TARGET HUNTER FORMULA:
+═══════════════════════════════════════════════════════
+
+DIKETAHUI:
+  T  = Target bersih         = Rp 100.000
+  FC = Fixed Cost             = Rp  28.000
+  A  = Argo rata-rata/trip    = Rp  14.500
+  VC = Variable Cost/trip     = Rp   3.195
+  CR = Cancel Rate            = 8% (0.08)
+
+
+STEP A: Hitung Total yang Harus Di-generate
+─────────────────────────────────────────────
+  
+  Total Needed = T + FC
+               = 100.000 + 28.000
+               = Rp 128.000
+  
+  Kenapa FC ditambahin?
+  Karena lo bilang "hitung BERSIH"
+  Artinya setelah rokok dan kopi kebayar
+  lo masih harus pegang Rp 100.000
+  
+  Jadi trip lo harus NUTUPIN target + biaya tetap
+
+
+STEP B: Hitung Net Income per Trip
+─────────────────────────────────────────────
+  
+  Net per Trip = A - VC
+               = 14.500 - 3.195
+               = Rp 11.305
+  
+  Ini artinya setiap 1 trip BERSIH lo
+  setelah potong komisi dan bensin
+  lo dapet Rp 11.305 masuk kantong
+
+
+STEP C: Hitung Jumlah Trip Minimum
+─────────────────────────────────────────────
+  
+  Trip Minimum = Total Needed ÷ Net per Trip
+               = 128.000 ÷ 11.305
+               = 11.32
+               
+  BULATKAN KE ATAS = 12 trip
+  
+  Kenapa ke atas?
+  Lo gak bisa narik 0.32 trip
+  Mending lebih 1 trip daripada kurang
+
+
+STEP D: Adjustment untuk Cancel Rate
+─────────────────────────────────────────────
+  
+  Real Orders Needed = Trip Minimum ÷ (1 - CR)
+                     = 12 ÷ (1 - 0.08)
+                     = 12 ÷ 0.92
+                     = 13.04
+                     
+  BULATKAN KE ATAS = 13 order harus diambil
+  
+  Dari 13 order:
+  - Expect ~1 cancel (8%)
+  - 12 jalan
+  - Target tercapai
+
+
+STEP E: Estimasi Waktu
+─────────────────────────────────────────────
+  
+  Total Waktu = Real Orders × Avg Cycle Time
+              = 13 × 35 menit
+              = 455 menit
+              = 7 jam 35 menit
+              
+  Tapi REALITA:
+  - Ada dead time (gak dapet order)
+  - Ada istirahat
+  - Traffic jam
+  
+  Buffer 15% = 455 × 1.15
+             = 523 menit
+             = 8 jam 43 menit
+             ≈ Hampir FULL DAY narik
+```
+
+---
+
+## LAYER 5: VALIDATION & REALITY CHECK
+
+### Model Gak Langsung Kasih Jawaban, Dia CEK Dulu
+
+```
+VALIDATION ENGINE:
+═══════════════════════════════════════════════════════
+
+CHECK 1: Apakah FEASIBLE dalam 1 hari?
+─────────────────────────────────────────
+  
+  Estimasi waktu    : ~8-9 jam
+  Jam narik tersedia : biasanya 15:00 - 23:00 = 8 jam
+  
+  STATUS: ⚠️ TIGHT tapi POSSIBLE
+  
+  Kalau gak feasible (misal target 500rb):
+  Model akan bilang "Bos, ini butuh 2 hari"
+
+
+CHECK 2: Apakah konsisten dengan TRACK RECORD?
+─────────────────────────────────────────
+  
+  Trip terbanyak lo dalam 1 hari (dari data):
+  
+  04.04.2026 → 5 trip
+  13.03.2026 → 7 trip ← rekor lo
+  14.03.2026 → 5 trip
+  
+  Target sekarang: 12-13 trip
+  Rekor lo: 7 trip
+  
+  STATUS: ⚠️ ABOVE NORMAL
+  
+  Model harus WARN lo:
+  "Bos, biasanya lo paling banyak 7 trip/hari.
+   Target ini butuh 12 trip. Lo harus narik
+   JAUH lebih lama dari biasanya."
+
+
+CHECK 3: Apakah saldo app CUKUP?
+─────────────────────────────────────────
+  
+  Komisi 12 trip = 12 × 1.595 = Rp 19.140
+  
+  Saldo app harus minimal:
+  Rp 19.140 + Rp 5.000 (mengendap) = Rp 24.140
+  
+  STATUS: ❓ PERLU TANYA DRIVER
+  
+  Kalau saldo gak cukup → kasih warning
+  "Saldo lo cukup gak buat 12 trip?"
+```
+
+---
+
+## LAYER 6: OUTPUT SYNTHESIS
+
+### Semua Data Dirangkai Jadi Bahasa Manusia
+
+```
+SYNTHESIS RULES:
+═══════════════════════════════════════════════════════
+
+Rule 1: PERSONA
+  Jawab sebagai "Bang Jek" → bahasa santai, supportive
+  
+Rule 2: LEAD WITH ANSWER
+  Jawaban utama (jumlah trip) harus di DEPAN
+  Jangan bikin driver baca paragraf dulu
+  
+Rule 3: BREAKDOWN HARUS ADA
+  Driver perlu tahu KENAPA segitu
+  Bukan cuma angka doang
+  
+Rule 4: REALITY CHECK WAJIB DISEBUT
+  Kalau target di atas normal → bilang terus terang
+  
+Rule 5: ACTIONABLE TIPS
+  Kasih saran yang bisa langsung dilakuin
+```
+
+### Final Output
+
+```
+╔══════════════════════════════════════════════════════╗
+║  🎯 TARGET HUNTER                                    ║
+║  "100rb buat beli susu"                              ║
+╠══════════════════════════════════════════════════════╣
+║                                                      ║
+║  JAWABAN SINGKAT:                                    ║
+║  Lo butuh minimal 12 TRIP (ambil 13 order)           ║
+║  Estimasi waktu: ± 8-9 jam narik                     ║
+║                                                      ║
+║──────────────────────────────────────────────────────║
+║                                                      ║
+║  BREAKDOWN DETAIL:                                   ║
+║                                                      ║
+║  Pendapatan:                                         ║
+║  └─ 12 trip × Rp 14.500     = Rp 174.000            ║
+║                                                      ║
+║  Pengeluaran:                                        ║
+║  ├─ Komisi app (12 × 1.595) = Rp  19.140            ║
+║  ├─ Bensin    (12 × 1.600)  = Rp  19.200            ║
+║  ├─ Rokok                    = Rp  20.000            ║
+║  ├─ Kopi                     = Rp   8.000            ║
+║  └─ TOTAL PENGELUARAN        = Rp  66.340            ║
+║                                                      ║
+║  ═══════════════════════════════════════              ║
+║  BERSIH DI TANGAN:                                   ║
+║  Rp 174.000 - Rp 66.340  = Rp 107.660               ║
+║                                                      ║
+║  Target Rp 100.000          ✅ TERCAPAI              ║
+║  Sisa lebih                 Rp 7.660 (bonus)         ║
+║  ═══════════════════════════════════════              ║
+║                                                      ║
+║──────────────────────────────────────────────────────║
+║                                                      ║
+║  ⚠️  REALITY CHECK:                                  ║
+║  Rekor lo selama ini: 7 trip/hari                    ║
+║  Target ini: 12 trip → lo harus narik                ║
+║  HAMPIR 2X LIPAT dari biasanya                       ║
+║                                                      ║
+║  💡 SARAN:                                           ║
+║  1. Mulai narik dari SIANG (jam 12:00)               ║
+║     bukan dari sore kayak biasanya                   ║
+║  2. Prioritas area Pesanggrahan-Bintaro              ║
+║     (trip pendek tapi cepet, volume tinggi)           ║
+║  3. Kalau jam 20:00 udah 8-9 trip                    ║
+║     lo on track, santai aja                          ║
+║  4. Alternative: narik 2 hari × 6 trip               ║
+║     lebih realistis dan gak capek                    ║
+║                                                      ║
+╚══════════════════════════════════════════════════════╝
+```
+
+---
+
+## Ringkasan: 6 Layer Kerja Model
+
+```
+INPUT
+  │
+  ▼
+LAYER 1 ─── NLU Parser ────────── Pecah kalimat jadi intent
+  │                                 + parameter terstruktur
+  ▼
+LAYER 2 ─── Data Retrieval ─────── Tarik data historis lo
+  │                                 Hitung avg, median, rate
+  ▼
+LAYER 3 ─── Cost Engine ────────── Estimasi semua biaya
+  │                                 Fixed vs Variable
+  ▼
+LAYER 4 ─── Calculator ─────────── Rumus inti
+  │                                 Target + Cost ÷ Net/trip
+  ▼
+LAYER 5 ─── Validation ─────────── Cek feasibility
+  │                                 Compare sama track record
+  ▼
+LAYER 6 ─── Output Synthesis ───── Rangkai jadi bahasa manusia
+  │                                 Dengan breakdown + tips
+  ▼
+OUTPUT
+```
+
+Lo mau gue **drill down lebih dalam** ke salah satu layer, atau mau lanjut ke **bikin prompt template** biar fitur ini bisa lo implement?
