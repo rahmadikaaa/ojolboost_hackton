@@ -21,7 +21,14 @@ AGENT_NAME: str = "The Planner"
 # MCP Server connection (sesuai CLAUDE.md Seksi 9.1)
 MCP_HOST: str = os.getenv("MCP_SERVER_HOST", "localhost")
 MCP_PORT: int = int(os.getenv("MCP_SERVER_PORT", "8080"))
-MCP_BASE_URL: str = f"http://{MCP_HOST}:{MCP_PORT}"
+
+# Auto-detect protokol: HTTPS jika host adalah URL remote (seperti Cloud Run)
+if MCP_HOST in ("localhost", "127.0.0.1"):
+    MCP_BASE_URL: str = f"http://{MCP_HOST}:{MCP_PORT}"
+else:
+    # Karena API ter-deploy di GCP, port 443 dan HTTPS adalah default
+    MCP_BASE_URL: str = f"https://{MCP_HOST}"
+    
 MCP_TIMEOUT_SECONDS: int = 10
 MCP_MAX_RETRIES: int = 2
 

@@ -61,6 +61,42 @@ class MamsLogger(logging.Logger):
     Mendukung structured fields untuk tracing multi-agent.
     """
 
+    def _pack_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """Mengemas kwargs tambahan ke dalam dictionary 'extra' untuk JSON formatter."""
+        standard_keys = {"exc_info", "stack_info", "stacklevel", "extra"}
+        std_kwargs = {k: v for k, v in kwargs.items() if k in standard_keys}
+        extra_fields = {k: v for k, v in kwargs.items() if k not in standard_keys}
+        
+        extra = kwargs.get("extra", {})
+        if extra_fields:
+            if "extra_fields" not in extra:
+                extra["extra_fields"] = {}
+            extra["extra_fields"].update(extra_fields)
+        
+        if extra:
+            std_kwargs["extra"] = extra
+        return std_kwargs
+
+    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        if self.isEnabledFor(logging.DEBUG):
+            self._log(logging.DEBUG, msg, args, **self._pack_kwargs(kwargs))
+
+    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        if self.isEnabledFor(logging.INFO):
+            self._log(logging.INFO, msg, args, **self._pack_kwargs(kwargs))
+
+    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        if self.isEnabledFor(logging.WARNING):
+            self._log(logging.WARNING, msg, args, **self._pack_kwargs(kwargs))
+
+    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        if self.isEnabledFor(logging.ERROR):
+            self._log(logging.ERROR, msg, args, **self._pack_kwargs(kwargs))
+
+    def critical(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        if self.isEnabledFor(logging.CRITICAL):
+            self._log(logging.CRITICAL, msg, args, **self._pack_kwargs(kwargs))
+
     def bind(self, **kwargs: Any) -> "BoundLogger":
         """Buat logger dengan context fields yang terikat."""
         return BoundLogger(self, kwargs)
