@@ -124,7 +124,7 @@ spec:
               value: "ojolboosttrack2"
 
             - name: BIGQUERY_LOCATION
-              value: "asia-southeast1"
+              value: "asia-southeast2"
 
             # ── MCP Server ─────────────────────────────────────
             - name: MCP_SERVER_PORT

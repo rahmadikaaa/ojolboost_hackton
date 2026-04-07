@@ -22,7 +22,7 @@ AGENT_NAME: str = "The Auditor"
 # BigQuery — Read + Write terbatas (sesuai CLAUDE.md Seksi 6.5)
 BIGQUERY_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "ojolboosttrack2")
 BIGQUERY_DATASET: str = os.getenv("BIGQUERY_DATASET", "ojolboosttrack2")
-BIGQUERY_LOCATION: str = os.getenv("BIGQUERY_LOCATION", "US")
+BIGQUERY_LOCATION: str = os.getenv("BIGQUERY_LOCATION", "asia-southeast2")
 BIGQUERY_TIMEOUT_SECONDS: int = 15
 
 # Tabel yang diizinkan (sesuai skills/the_auditor/transaction_schema.md)

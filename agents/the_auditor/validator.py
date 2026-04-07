@@ -106,13 +106,19 @@ def verify_and_clean_query(
 
     # ---- Panggil L3: AuditorValidator.validate_query() ----
     import re as _re
-    _all_refs = _re.findall(r"`([^`]+)[.]([^`]+)`", sql)
-    if _all_refs:
-        _dataset, _table = _all_refs[0]
+    # Handle 3-part ref: `project.dataset.table`
+    _three_part = _re.findall(r'`([^`]+)\.([^`]+)\.([^`]+)`', sql)
+    if _three_part:
+        _, _dataset, _table = _three_part[0]
     else:
-        _plain = _re.search(r"\b(ojolboosttrack2)[.]([a-z_]+)\b", sql)
-        _dataset = _plain.group(1) if _plain else "ojolboosttrack2"
-        _table = _plain.group(2) if _plain else "trx_daily_income"
+        # Handle 2-part ref: `dataset.table`
+        _two_part = _re.findall(r'`([^`]+)\.([^`]+)`', sql)
+        if _two_part:
+            _dataset, _table = _two_part[0]
+        else:
+            _plain = _re.search(r'\b(ojolboosttrack2)\.([a-z_]+)\b', sql)
+            _dataset = _plain.group(1) if _plain else "ojolboosttrack2"
+            _table = _plain.group(2) if _plain else "trx_daily_income"
 
     try:
         validation_result: ValidationResultSchema = AuditorValidator.validate_query(

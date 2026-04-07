@@ -64,7 +64,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     GOOGLE_CLOUD_PROJECT="" \
     VERTEX_AI_LOCATION="asia-southeast1" \
     BIGQUERY_DATASET="ojolboosttrack2" \
-    BIGQUERY_LOCATION="asia-southeast1"
+    BIGQUERY_LOCATION="asia-southeast2"
 
 WORKDIR /app
 

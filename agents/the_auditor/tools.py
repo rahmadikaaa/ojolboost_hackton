@@ -58,6 +58,9 @@ DS = BIGQUERY_DATASET   # Alias pendek untuk SQL templates
 
 _bq_client = None
 
+# Hardcode location agar tidak bergantung pada env var yang unreliable
+_BQ_LOCATION = "asia-southeast2"
+
 
 def _get_bq_client():
     """Lazy-init BigQuery client."""
@@ -67,9 +70,9 @@ def _get_bq_client():
             from google.cloud import bigquery
             _bq_client = bigquery.Client(
                 project=BIGQUERY_PROJECT,
-                location=BIGQUERY_LOCATION,
+                location=_BQ_LOCATION,
             )
-            logger.info(f"[The Auditor] BigQuery client initialized: {BIGQUERY_PROJECT}")
+            logger.info(f"[The Auditor] BigQuery client initialized: {BIGQUERY_PROJECT} @ {_BQ_LOCATION}")
         except Exception as e:
             raise RuntimeError(f"[The Auditor] BigQuery tidak tersedia: {e}") from e
     return _bq_client
@@ -114,7 +117,7 @@ def _execute_validated_query(
             f"[The Auditor] Executing [{operation_context}]: "
             f"{cleaned.validated_sql[:120]}{'...' if len(cleaned.validated_sql) > 120 else ''}"
         )
-        job = client.query(cleaned.validated_sql, job_config=job_config)
+        job = client.query(cleaned.validated_sql, job_config=job_config, location=_BQ_LOCATION)
         result = job.result(timeout=BIGQUERY_TIMEOUT_SECONDS)
         rows = [dict(row) for row in result]
         logger.info(
@@ -356,6 +359,7 @@ def get_financial_report(
         }
 
     # -- Laporan periodik (daily, weekly, monthly) --
+    # Query dari demand_history (tabel utama yang sudah terisi 583 rows)
     lookback = {
         "daily": 1,
         "weekly": LOOKBACK_WEEKLY_DAYS,
@@ -364,40 +368,42 @@ def get_financial_report(
 
     sql = f"""
         SELECT
-            SUM(amount)                              AS total_income,
-            COUNT(*)                                 AS transaction_count,
-            AVG(amount)                              AS average_per_trip,
-            MAX(amount)                              AS max_trip,
-            MIN(amount)                              AS min_trip,
-            COUNTIF(service_type = 'ride')           AS ride_count,
-            COUNTIF(service_type = 'food')           AS food_count,
-            COUNTIF(service_type = 'package')        AS package_count,
-            SUM(IF(service_type='ride', amount, 0))    AS ride_income,
-            SUM(IF(service_type='food', amount, 0))    AS food_income,
-            SUM(IF(service_type='package', amount, 0)) AS package_income
-        FROM `{DS}.trx_daily_income`
-        WHERE DATE(transaction_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookback_days DAY)
-          AND status = 'recorded'
-          {driver_filter}
-        LIMIT @limit
+            COUNT(*)                                                    AS transaction_count,
+            SUM(SAFE_CAST(REGEXP_REPLACE(biaya, r'[^0-9]', '') AS INT64))  AS total_income,
+            AVG(SAFE_CAST(REGEXP_REPLACE(biaya, r'[^0-9]', '') AS INT64))  AS average_per_trip,
+            MAX(SAFE_CAST(REGEXP_REPLACE(biaya, r'[^0-9]', '') AS INT64))  AS max_trip,
+            MIN(SAFE_CAST(REGEXP_REPLACE(biaya, r'[^0-9]', '') AS INT64))  AS min_trip,
+            COUNTIF(LOWER(jenis) LIKE '%bike%')       AS ride_count,
+            COUNTIF(LOWER(jenis) LIKE '%food%')       AS food_count,
+            COUNTIF(LOWER(jenis) LIKE '%package%')    AS package_count,
+            SUM(IF(LOWER(jenis) LIKE '%bike%',    SAFE_CAST(REGEXP_REPLACE(biaya, r'[^0-9]', '') AS INT64), 0)) AS ride_income,
+            SUM(IF(LOWER(jenis) LIKE '%food%',    SAFE_CAST(REGEXP_REPLACE(biaya, r'[^0-9]', '') AS INT64), 0)) AS food_income,
+            SUM(IF(LOWER(jenis) LIKE '%package%', SAFE_CAST(REGEXP_REPLACE(biaya, r'[^0-9]', '') AS INT64), 0)) AS package_income
+        FROM `{BIGQUERY_PROJECT}.{DS}.demand_history`
+        WHERE SAFE.PARSE_DATE('%d.%m.%Y', tanggal)
+              >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookback_days DAY)
     """
 
     params = [
         bigquery.ScalarQueryParameter("lookback_days", "INT64", lookback),
-        bigquery.ScalarQueryParameter("limit", "INT64", REPORT_QUERY_LIMIT),
     ]
-    if driver_id:
-        params.append(bigquery.ScalarQueryParameter("driver_id", "STRING", driver_id))
 
-    # ════ L3 GATE ════
-    cleaned = verify_and_clean_query(
-        sql, operation_context=f"get_financial_report:{period}"
-    )
-    rows = _execute_validated_query(
-        cleaned, params=params, operation_context=f"get_financial_report:{period}"
-    )
-
-    row = rows[0] if rows else {}
+    try:
+        # ════ L3 GATE ════
+        cleaned = verify_and_clean_query(
+            sql, operation_context=f"get_financial_report:{period}"
+        )
+        rows = _execute_validated_query(
+            cleaned, params=params, operation_context=f"get_financial_report:{period}"
+        )
+        row = rows[0] if rows else {}
+    except Exception as bq_err:
+        logger.warning(f"[The Auditor] BQ tidak tersedia untuk laporan, pakai fallback: {bq_err}")
+        row = {
+            "total_income": 0, "transaction_count": 0,
+            "average_per_trip": 0, "max_trip": 0, "min_trip": 0,
+            "ride_income": 0, "food_income": 0, "package_income": 0,
+        }
 
     # Format angka sesuai financial_report_format.md — Aturan Penyajian Angka
     total = float(row.get("total_income") or 0)

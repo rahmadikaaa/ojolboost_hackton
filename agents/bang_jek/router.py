@@ -161,6 +161,11 @@ ROUTING_RULES: dict[str, dict[IntentType, list[str]]] = {
             "titik gacor", "titik ramai", "mangkal di mana", "lokasi gacor",
             "rekomendasi mangkal", "spot gacor", "zona gacor",
             "area gacor", "mana yang gacor",
+            # Pattern natural driver
+            "cek lokasi", "cek area", "cek zona", "cek daerah",
+            "orderan mana", "rame dimana", "rame di mana",
+            "lagi rame", "yang rame", "paling rame",
+            "sekitar mana", "di mana yang bagus",
         ],
     },
 }
@@ -194,6 +199,13 @@ STRONG_SIGNAL_LOCK: list[tuple[str, str, IntentType]] = [
     ("mangkal di mana",  "Demand Analytics", IntentType.ANALYZE_DEMAND),
     ("rekomendasi mangkal", "Demand Analytics", IntentType.ANALYZE_DEMAND),
     ("hotspot",          "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("cek lokasi",       "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("cek area",         "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("cek zona",         "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("orderan mana",     "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("rame dimana",      "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("rame di mana",     "Demand Analytics", IntentType.ANALYZE_DEMAND),
+    ("paling rame",      "Demand Analytics", IntentType.ANALYZE_DEMAND),
 
     # Rekap Data Tarikan → The Auditor (Laporan)
     ("rekap tarikan",    "The Auditor", IntentType.GET_FINANCIAL_REPORT),

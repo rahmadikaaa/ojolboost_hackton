@@ -42,6 +42,7 @@ ALLOWED_DATASET: str = os.getenv("BIGQUERY_DATASET", "ojolboosttrack2")
 ALLOWED_TABLES: frozenset = frozenset({
     "trx_daily_income",
     "zone_demand_history",
+    "demand_history",
     "schedule_reminders",
     "trx_monthly_summary",
     "driver_state",

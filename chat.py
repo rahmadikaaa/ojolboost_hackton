@@ -23,6 +23,19 @@ try:
 except ImportError:
     auditor_available = False
 
+try:
+    from agents.demand_analytics.agent import DemandAnalyticsAgent
+    demand_available = True
+except ImportError:
+    demand_available = False
+
+try:
+    from agents.environmental.agent import EnvironmentalAgent
+    environmental_available = True
+except ImportError:
+    environmental_available = False
+
+
 
 logger = get_logger("chat_cli")
 
@@ -58,6 +71,21 @@ def main():
             registered_agents.append("The Auditor")
         except Exception as e:
             print(f"⚠️ Gagal memuat The Auditor: {e}")
+
+    if demand_available:
+        try:
+            orchestrator.register_sub_agent("Demand Analytics", DemandAnalyticsAgent())
+            registered_agents.append("Demand Analytics")
+        except Exception as e:
+            print(f"⚠️ Gagal memuat Demand Analytics: {e}")
+
+    if environmental_available:
+        try:
+            orchestrator.register_sub_agent("Environmental", EnvironmentalAgent())
+            registered_agents.append("Environmental")
+        except Exception as e:
+            print(f"⚠️ Gagal memuat Environmental: {e}")
+
 
     if not registered_agents:
         print("⚠️ Perhatian: Belum ada sub-agen yang ter-register!")

@@ -109,7 +109,43 @@ Contoh respons ideal untuk multi-task:
 "Siap Bang! ✅ Pendapatan Rp 250 ribu udah masuk buku. ✅ Besok jam 9 udah saya set pengingat ganti oli ya.
 Ngomong-ngomong, Sudirman lagi gerimis nih — data nunjukin Food lagi naik. 
 Mending aktifin mode Food dulu sambil nunggu kering!"
+
+=== KETIKA TIDAK ADA INTENT YANG TERDETEKSI ===
+
+Jika input pengguna tidak jelas / tidak ada intent yang dikenali, JANGAN hanya bilang
+"Bang Jek tidak mengerti". Sebagai gantinya, tampilkan menu pilihan ini PERSIS:
+
+---
+Halo Bang! 👋 Bisa bantu:
+
+🎯 Ketik: "kejar target [angka]rb"
+📍 Ketik: "titik gacor sekarang"
+📊 Ketik: "rekap tarikan hari ini"
+🔔 Ketik: "ingetin [hal] [waktu]"
+📝 Ketik: "daftar belanja [item]"
+
+Atau chat bebas aja, Bang Jek ngerti! 💪
+---
+
+Tampilkan menu ini SETIAP KALI tidak ada intent yang terdeteksi.
 """
+
+
+# ============================================================
+# FALLBACK MENU — Ditampilkan saat tidak ada intent terdeteksi
+# ============================================================
+
+FALLBACK_MENU: str = """Halo Bang! 👋 Bisa bantu:
+
+🎯 Ketik: "kejar target [angka]rb"
+📍 Ketik: "titik gacor sekarang"
+📊 Ketik: "rekap tarikan hari ini"
+🔔 Ketik: "ingetin [hal] [waktu]"
+📝 Ketik: "daftar belanja [item]"
+
+Atau chat bebas aja, Bang Jek ngerti! 💪"""
+
+
 
 
 # ============================================================

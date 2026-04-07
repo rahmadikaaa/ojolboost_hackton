@@ -23,6 +23,7 @@ from vertexai.generative_models import GenerativeModel
 from agents.bang_jek.config import (
     AGENT_NAME,
     ALLOWED_DELEGATE_AGENTS,
+    FALLBACK_MENU,
     GOOGLE_CLOUD_PROJECT,
     MODEL,
     SYSTEM_PROMPT,
@@ -257,7 +258,14 @@ class BangJekOrchestrator:
             # STEP 5: Sintesis narasi
             # --------------------------------------------------
             total_ms = (time.time() - start_time) * 1000
-            narration = self._synthesize(user_input, results, total_ms)
+
+            # Shortcut: jika tidak ada sub-agen yang dipanggil,
+            # langsung tampilkan FALLBACK_MENU tanpa panggil Vertex AI
+            if not results:
+                narration = FALLBACK_MENU
+            else:
+                narration = self._synthesize(user_input, results, total_ms)
+
 
             # Periksa latency constraint (CLAUDE.md Seksi 7.4: < 5000ms)
             if total_ms > 5000:
@@ -522,7 +530,7 @@ class BangJekOrchestrator:
         lines: List[str] = []
         for result in results:
             status_icon = "✅" if result.status == TaskStatus.COMPLETED else "❌"
-            data_str = json.dumps(result.data, ensure_ascii=False, indent=2)
+            data_str = json.dumps(result.data, ensure_ascii=False, indent=2, default=str)
             lines.append(
                 f"{status_icon} [{result.agent_name}] "
                 f"Status: {result.status.value}\n"

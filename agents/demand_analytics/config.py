@@ -22,7 +22,7 @@ MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 # BigQuery — Read-only (sesuai CLAUDE.md Seksi 6.1)
 BIGQUERY_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "ojolboosttrack2")
 BIGQUERY_DATASET: str = os.getenv("BIGQUERY_DATASET", "ojolboosttrack2")
-BIGQUERY_LOCATION: str = os.getenv("BIGQUERY_LOCATION", "asia-southeast1")
+BIGQUERY_LOCATION: str = os.getenv("BIGQUERY_LOCATION", "asia-southeast2")
 
 # Tools yang diizinkan (untuk validasi PreToolUseHook)
 ALLOWED_TOOLS: tuple[str, ...] = (
