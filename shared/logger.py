@@ -183,6 +183,45 @@ logging.setLoggerClass(MamsLogger)
 
 _loggers: Dict[str, MamsLogger] = {}
 
+# Flag global — kalau True, logger pakai file handler bukan stdout
+_console_suppressed: bool = False
+_log_file_path: str = os.getenv("LOG_FILE_PATH", "ojolboost.log")
+
+
+def suppress_console_logs(suppress: bool = True, log_file: Optional[str] = None) -> None:
+    """
+    Matikan output log ke terminal (stdout).
+    Bisa dipanggil kapan saja — termasuk SETELAH beberapa logger sudah dibuat.
+    Akan mereset semua StreamHandler yang sudah ada ke FileHandler.
+
+    Args:
+        suppress: True = log ke file saja, False = log ke stdout.
+        log_file: Path file log (default: ojolboost.log).
+    """
+    global _console_suppressed, _log_file_path
+    _console_suppressed = suppress
+    if log_file:
+        _log_file_path = log_file
+
+    if not suppress:
+        return
+
+    # Patch logger yang sudah terlanjur dibuat (module-level get_logger calls)
+    for logger in _loggers.values():
+        handlers_to_remove = [
+            h for h in logger.handlers if isinstance(h, logging.StreamHandler)
+            and not isinstance(h, logging.FileHandler)
+        ]
+        for h in handlers_to_remove:
+            formatter = h.formatter
+            logger.removeHandler(h)
+            h.close()
+            # Ganti dengan FileHandler
+            file_handler = logging.FileHandler(_log_file_path, encoding="utf-8")
+            if formatter:
+                file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+
 
 def get_logger(name: str) -> MamsLogger:
     """
@@ -199,7 +238,14 @@ def get_logger(name: str) -> MamsLogger:
     logger = logging.getLogger(f"ojolboost.{name}")
 
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
+        # Tentukan output: file (untuk CLI interaktif) atau stdout (untuk Cloud Run / prod)
+        log_output = os.getenv("LOG_OUTPUT", "").lower()
+        use_file = _console_suppressed or log_output == "file"
+
+        if use_file:
+            handler = logging.FileHandler(_log_file_path, encoding="utf-8")
+        else:
+            handler = logging.StreamHandler(sys.stdout)
 
         log_format = os.getenv("LOG_FORMAT", "json").lower()
         if log_format == "json":

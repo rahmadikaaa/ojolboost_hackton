@@ -1,6 +1,11 @@
 import os
 import sys
 
+# ⚡ Matikan log JSON ke terminal SEBELUM logger apapun diinisialisasi.
+# Log tetap tersimpan di file ojolboost.log untuk debugging.
+from shared.logger import suppress_console_logs
+suppress_console_logs(suppress=True, log_file="ojolboost.log")
+
 from shared.logger import get_logger
 from agents.bang_jek.agent import BangJekOrchestrator
 
