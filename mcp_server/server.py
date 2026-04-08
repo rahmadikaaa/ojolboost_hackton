@@ -789,6 +789,17 @@ def _handle_update_note(args: Dict[str, Any]) -> Dict[str, Any]:
 # ============================================================
 # FLASK ROUTES
 # ============================================================
+# ============================================================
+# FLASK ROUTES
+# ============================================================
+
+@app.route('/', methods=['GET'])
+def root_info() -> Response:
+    return jsonify({
+        "status": "OjolBoost MAMS Backend is ACTIVE",
+        "message": "The current prototype is a CLI-based system to focus on core ADK reasoning. Please watch the 3-minute Demo Video to see the full interactive experience.",
+        "docs_hint": "Use POST /mcp/call for agent interactions."
+    }), 200
 
 @app.route("/health", methods=["GET"])
 def health_check() -> Response:
