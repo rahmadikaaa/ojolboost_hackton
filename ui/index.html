@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OjolBoost — Bang Jek AI</title>
+  <meta name="description" content="Asisten AI cerdas untuk pengemudi ojek online. Catat pendapatan, cek cuaca, temukan titik gacor — semua dalam satu percakapan." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+
+    <!-- ══════════════════════════════════
+         SIDEBAR
+    ══════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo">🛵</div>
+        <div class="brand-text">
+          <span class="brand-name">OjolBoost</span>
+          <span class="brand-tagline">MAMS v2.0</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Menu Utama</div>
+        <button class="nav-item active" id="nav-chat">
+          <span class="nav-icon">💬</span>
+          <span>Chat Bang Jek</span>
+        </button>
+        <button class="nav-item" id="nav-dashboard" onclick="showComingSoon('Dashboard')">
+          <span class="nav-icon">📊</span>
+          <span>Dashboard</span>
+          <span class="nav-badge">Soon</span>
+        </button>
+        <button class="nav-item" id="nav-history" onclick="showComingSoon('Riwayat')">
+          <span class="nav-icon">🗂️</span>
+          <span>Riwayat</span>
+          <span class="nav-badge">Soon</span>
+        </button>
+      </nav>
+
+      <!-- Agent Status Panel -->
+      <div class="agent-status-panel">
+        <div class="nav-section-label">Status Sub-Agen</div>
+        <div class="agent-pill" id="status-auditor">
+          <span class="agent-dot"></span>
+          <span>The Auditor</span>
+        </div>
+        <div class="agent-pill" id="status-demand">
+          <span class="agent-dot"></span>
+          <span>Demand Analytics</span>
+        </div>
+        <div class="agent-pill" id="status-env">
+          <span class="agent-dot"></span>
+          <span>Environmental</span>
+        </div>
+        <div class="agent-pill" id="status-planner">
+          <span class="agent-dot"></span>
+          <span>The Planner</span>
+        </div>
+        <div class="agent-pill" id="status-archivist">
+          <span class="agent-dot"></span>
+          <span>The Archivist</span>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="driver-chip">
+          <div class="driver-avatar">👤</div>
+          <div class="driver-info">
+            <span class="driver-name">Driver Test</span>
+            <span class="driver-id">DRIVER_WEB_001</span>
+          </div>
+          <div class="driver-status-dot online"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ══════════════════════════════════
+         MAIN CHAT AREA
+    ══════════════════════════════════ -->
+    <main class="chat-main">
+
+      <!-- Header -->
+      <header class="chat-header">
+        <button class="hamburger" id="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="header-agent">
+          <div class="agent-avatar">🤖</div>
+          <div class="agent-info">
+            <span class="agent-name">Bang Jek</span>
+            <span class="agent-status-text" id="header-status">
+              <span class="online-dot"></span> Online &amp; Siap
+            </span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" onclick="clearChat()" title="Clear chat" id="btn-clear">
+            🗑️
+          </button>
+          <div class="latency-display" id="latency-display" title="Latency terakhir">
+            <span class="latency-icon">⚡</span>
+            <span id="latency-value">—</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Messages -->
+      <div class="messages-container" id="messages-container">
+        <div class="messages-scroll" id="messages-scroll">
+
+          <!-- Welcome message -->
+          <div class="message-group bot-group" id="welcome-msg">
+            <div class="avatar-wrap">
+              <div class="msg-avatar bot-avatar">🤖</div>
+            </div>
+            <div class="messages-stack">
+              <div class="message bot-message">
+                <p>Halo Bang! 👋 Gue Bang Jek, asisten AI lo buat narik ojek lebih cerdas.</p>
+              </div>
+              <div class="message bot-message">
+                <p>Mau ngapain nih? Bisa catat pendapatan, cek cuaca, cari titik gacor, bikin reminder, atau simpan catatan. Bilang aja!</p>
+              </div>
+              <div class="msg-meta">
+                <span>Bang Jek</span>
+                <span id="welcome-time"></span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="quick-actions-bar" id="quick-actions-bar">
+        <div class="qa-scroll">
+          <button class="qa-btn" id="qa-rekap"     onclick="sendQuick('Rekap pendapatan hari ini dong')">
+            💰 Rekap Tarikan
+          </button>
+          <button class="qa-btn" id="qa-cuaca"     onclick="sendQuick('Cek cuaca Sudirman sekarang')">
+            🌤️ Cek Cuaca
+          </button>
+          <button class="qa-btn" id="qa-gacor"     onclick="sendQuick('Titik gacor sekarang di mana?')">
+            🔥 Titik Gacor
+          </button>
+          <button class="qa-btn" id="qa-target"    onclick="sendQuick('Kalau mau dapet bersih 300 ribu hari ini, narik berapa trip?')">
+            🎯 Hitung Target
+          </button>
+          <button class="qa-btn" id="qa-servis"    onclick="sendQuick('Ingetin ganti oli motor besok jam 9 pagi')">
+            🔧 Jadwal Servis
+          </button>
+          <button class="qa-btn" id="qa-catat"     onclick="sendQuick('Catat pendapatan 150 ribu dari trip ride tadi')">
+            ✏️ Catat Income
+          </button>
+        </div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="input-area">
+        <div class="input-wrap">
+          <textarea
+            id="msg-input"
+            class="msg-input"
+            placeholder="Ketik pesan ke Bang Jek..."
+            rows="1"
+            maxlength="500"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          ></textarea>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()" aria-label="Kirim pesan">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="input-footer">
+          <span class="input-hint">Enter untuk kirim · Shift+Enter untuk baris baru</span>
+          <span class="char-count" id="char-count">0/500</span>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

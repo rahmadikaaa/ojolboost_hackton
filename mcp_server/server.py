@@ -39,7 +39,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, Response, jsonify, request
+# ⚡ Matikan log JSON ke terminal — harus sebelum semua import agen
+from shared.logger import suppress_console_logs
+suppress_console_logs(suppress=True, log_file="ojolboost.log")
+
+from flask import Flask, Response, jsonify, request, send_from_directory
+from flask_cors import CORS
 from pydantic import ValidationError
 
 # ============================================================
@@ -60,10 +65,58 @@ logger = get_logger("mcp_server")
 
 # ============================================================
 # FLASK APP — Stateless WSGI
+# Static folder: ../ui/ (folder UI web chat)
 # ============================================================
 
-app = Flask(__name__)
+_UI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ui")
+
+app = Flask(__name__, static_folder=_UI_DIR, static_url_path="")
 app.config["JSON_SORT_KEYS"] = False
+CORS(app)  # Izinkan cross-origin request dari browser
+
+# ============================================================
+# ORCHESTRATOR SINGLETON — diinisialisasi sekali saat startup
+# Semua /chat request memakai instance yang sama.
+# ============================================================
+
+_orchestrator = None
+
+
+def _get_orchestrator():
+    """
+    Lazy-init singleton BangJekOrchestrator.
+    Sub-agen di-register dengan graceful fallback jika belum tersedia.
+    """
+    global _orchestrator
+    if _orchestrator is not None:
+        return _orchestrator
+
+    from agents.bang_jek.agent import BangJekOrchestrator
+
+    orch = BangJekOrchestrator()
+    orch.initialize()
+
+    # Register sub-agen — graceful fallback jika belum ada implementasi
+    _sub_agents_to_register = [
+        ("The Auditor",        "agents.the_auditor.agent",       "TheAuditorAgent"),
+        ("Demand Analytics",   "agents.demand_analytics.agent",  "DemandAnalyticsAgent"),
+        ("Environmental",      "agents.environmental.agent",     "EnvironmentalAgent"),
+        ("The Planner",        "agents.the_planner.agent",       "ThePlannerAgent"),
+        ("The Archivist",      "agents.the_archivist.agent",     "TheArchivistAgent"),
+    ]
+
+    for agent_name, module_path, class_name in _sub_agents_to_register:
+        try:
+            import importlib
+            module = importlib.import_module(module_path)
+            agent_class = getattr(module, class_name)
+            orch.register_sub_agent(agent_name, agent_class())
+            logger.info(f"[Server] Sub-agent registered: {agent_name}")
+        except Exception as e:
+            logger.warning(f"[Server] Sub-agent '{agent_name}' tidak tersedia: {e}")
+
+    _orchestrator = orch
+    return _orchestrator
 
 
 # ============================================================
@@ -793,13 +846,10 @@ def _handle_update_note(args: Dict[str, Any]) -> Dict[str, Any]:
 # FLASK ROUTES
 # ============================================================
 
-@app.route('/', methods=['GET'])
-def root_info() -> Response:
-    return jsonify({
-        "status": "OjolBoost MAMS Backend is ACTIVE",
-        "message": "The current prototype is a CLI-based system to focus on core ADK reasoning. Please watch the 3-minute Demo Video to see the full interactive experience.",
-        "docs_hint": "Use POST /mcp/call for agent interactions."
-    }), 200
+@app.route("/", methods=["GET"])
+def root_index() -> Response:
+    """Serve Web Chat UI (ui/index.html)."""
+    return send_from_directory(_UI_DIR, "index.html")
 
 @app.route("/health", methods=["GET"])
 def health_check() -> Response:
@@ -907,6 +957,68 @@ def mcp_call() -> Response:
         )
 
     return jsonify(rpc_response), http_status
+
+
+# ============================================================
+# WEB CHAT ENDPOINT — Untuk UI web chat
+# POST /chat  { "message": "...", "driver_id": "..." }
+# ============================================================
+
+@app.route("/chat", methods=["POST"])
+def chat() -> Response:
+    """
+    Endpoint utama untuk Web Chat UI.
+    Menerima pesan pengguna dan mengembalikan respons Bang Jek.
+
+    Request Body:
+        { "message": "cek cuaca Sudirman", "driver_id": "DRIVER_001" }
+
+    Response:
+        {
+            "narration": "Bang, Sudirman lagi mendung...",
+            "agents_called": ["Environmental"],
+            "latency_ms": 1234.5,
+            "status": "ok"
+        }
+    """
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        message = (body.get("message") or "").strip()
+        driver_id = body.get("driver_id", "DRIVER_WEB_001")
+
+        if not message:
+            return jsonify({
+                "narration": "Hmm, pesannya kosong Bang. Coba tulis lagi ya!",
+                "agents_called": [],
+                "latency_ms": 0,
+                "status": "error",
+            }), 400
+
+        orch = _get_orchestrator()
+        response = orch.process(message, driver_id=driver_id)
+
+        logger.info(
+            f"[/chat] message='{message[:60]}...', "
+            f"agents={response.agents_called}, "
+            f"latency={response.total_latency_ms:.0f}ms"
+        )
+
+        return jsonify({
+            "narration": response.narration,
+            "agents_called": response.agents_called,
+            "latency_ms": response.total_latency_ms,
+            "status": "ok",
+        }), 200
+
+    except Exception as e:
+        logger.error(f"[/chat] Internal error: {e}\n{traceback.format_exc()}")
+        return jsonify({
+            "narration": "Aduh Bang, Bang Jek lagi ada masalah internal nih. Coba lagi sebentar ya!",
+            "agents_called": [],
+            "latency_ms": 0,
+            "status": "error",
+            "detail": str(e) if os.getenv("DEBUG") == "true" else None,
+        }), 500
 
 
 @app.errorhandler(404)
