@@ -209,8 +209,8 @@ body {
   width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
 }
 .driver-status-dot.online {
-  background: var(--success);
-  box-shadow: 0 0 8px var(--success);
+  background: #00C48C;
+  box-shadow: 0 0 8px rgba(0, 196, 140, 0.6);
   animation: pulse-dot 2s ease-in-out infinite;
 }
 @keyframes pulse-dot {

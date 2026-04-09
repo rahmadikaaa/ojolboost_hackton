@@ -6,6 +6,73 @@ Sistem ini didukung oleh **Google Vertex AI (Gemini 2.5 Flash)** yang terintegra
 
 ---
 
+## 🧠 Architectural Framework
+
+![OjolBoost Architectural Blueprint](assets/blueprint_arsitektur.jpg)
+
+OjolBoost dibangun di atas **5-Layer ADK Blueprint** yang memastikan sistem bersifat *stateful*, aman, modular, dan *scalable* secara industrial. Setiap lapisan memiliki tanggung jawab yang dienkapsulasi secara ketat.
+
+| Layer | Nama | Fungsi |
+| :---: | :--- | :--- |
+| **L1** | 🗄️ Memory | Context retention & agent constitution |
+| **L2** | 📚 Knowledge | Modular domain context untuk ekosistem Ojol |
+| **L3** | 🛡️ Guardrail | Rigid event hooks & PII protection |
+| **L4** | 🤝 Delegation | Orkestrasi sub-agen Auditor, Planner, dan Demand |
+| **L5** | 🚀 Distribution | Scalable deployment via Google Cloud Run |
+
+### Layer 1 — Memory (Context Retention & Constitution)
+> **Path:** `shared/` · **File Acuan:** `CLAUDE.md`
+
+Lapisan ini berfungsi sebagai *long-term memory* dan *constitution* seluruh sistem. Menggunakan **ADK Session State** untuk menyimpan konteks pengguna yang persisten (nama driver, target harian, preferensi wilayah) antar sesi percakapan. `CLAUDE.md` berfungsi sebagai *Source of Truth* yang tidak dapat dilanggar oleh agen manapun.
+
+- **Teknologi:** `google-adk` Session State, Pydantic Schemas (`shared/schemas.py`), JSON Structured Logging (`shared/logger.py`)
+- **Komponen Kunci:** `shared/context.py`, `shared/schemas.py`, `shared/logger.py`
+
+### Layer 2 — Knowledge (Modular Domain Context)
+> **Path:** `skills/`
+
+Setiap sub-agen memiliki *knowledge base* tersendiri dalam format Markdown (`.md`) yang di-*inject* sebagai konteks domain ke dalam instruksi agen. Lapisan ini memastikan agen hanya beroperasi sesuai domain keahliannya (finansial, cuaca, lokasi).
+
+- **Teknologi:** Markdown Knowledge Files, **Gemini 2.5 Flash** (via `google-cloud-aiplatform`)
+- **Komponen Kunci:** `skills/the_archivist/`, `skills/the_auditor/transaction_schema.md`
+
+### Layer 3 — Guardrail (Rigid Event Hooks & PII Protection)
+> **Path:** `guardrails/`
+
+Lapisan keamanan deterministik yang dieksekusi sebagai *interceptors* sebelum (`pre_tool_use`) dan sesudah (`post_tool_use`) setiap pemanggilan tool. Memblokir secara keras (*Hard Block*) semua operasi destruktif (DELETE/DROP) dan melindungi data PII driver.
+
+- **Teknologi:** ADK Event Hooks, `auditor_validator.py`, Pydantic Validation
+- **Komponen Kunci:** `guardrails/pre_tool_use.py`, `guardrails/post_tool_use.py`, `guardrails/auditor_validator.py`
+
+### Layer 4 — Delegation (Orchestrating Sub-Agents)
+> **Path:** `agents/`
+
+*Primary Orchestrator* **Bang Jek** menerima *natural language input* dari pengguna, melakukan *intent classification*, lalu mendelegasikan tugas ke sub-agen spesialis. Semua komunikasi antar agen menggunakan standar **Model Context Protocol (MCP)** dan hasilnya dikembalikan sebagai JSON terstruktur.
+
+- **Teknologi:** **Google ADK** Multi-Agent Framework, **MCP (Model Context Protocol)**, **Gemini 2.5 Flash**
+- **Sub-Agen:** `The Auditor` (keuangan), `The Planner` (jadwal), `Demand Analytics` (lokasi & tren)
+
+### Layer 5 — Distribution (Scalable Cloud Deployment)
+> **Path:** `deploy/`
+
+Lapisan infrastruktur yang mengemas seluruh sistem ke dalam container Docker dan mendistribusikannya sebagai layanan *serverless* di **Google Cloud Run**. Data historis dan laporan keuangan diproses dan disimpan di **BigQuery** (`asia-southeast2`).
+
+- **Teknologi:** **Google Cloud Run**, **BigQuery** (`asia-southeast2`), Docker, `deploy/cloudbuild.yaml`
+- **Komponen Kunci:** `deploy/Dockerfile`, `deploy/service.yaml`
+
+### 🔧 Core Tech Stack
+
+| Komponen | Teknologi | Peran |
+| :--- | :--- | :--- |
+| **AI Model** | Gemini 2.5 Flash (Vertex AI) | LLM engine untuk semua agen |
+| **Agent Framework** | Google ADK | Orkestrasi multi-agen |
+| **Tool Protocol** | MCP (Model Context Protocol) | Komunikasi agen ↔ tools eksternal |
+| **Data Warehouse** | BigQuery (`asia-southeast2`) | Analitik historis & pelaporan keuangan |
+| **Cloud Runtime** | Google Cloud Run | Deployment serverless & scalable |
+| **Security** | L3 Guardrails + Pydantic | Validasi deterministik & PII protection |
+
+---
+
 ## 🚀 Fitur Utama & Keunggulan
 
 OjolBoost menstruktur pengambilan keputusan dari berbasis intuisi ke *data-driven*, dengan optimalisasi tingkat konversi *Active-hour yield*. 
