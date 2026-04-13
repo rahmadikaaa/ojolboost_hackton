@@ -1,15 +1,19 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OjolBoost — Bang Jek AI</title>
-  <meta name="description" content="Asisten AI cerdas untuk pengemudi ojek online. Catat pendapatan, cek cuaca, temukan titik gacor — semua dalam satu percakapan." />
+  <meta name="description"
+    content="Asisten AI cerdas untuk pengemudi ojek online. Catat pendapatan, cek cuaca, temukan titik gacor — semua dalam satu percakapan." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <div class="app-shell">
 
@@ -124,7 +128,15 @@
                 <p>Halo Bang! 👋 Gue Bang Jek, asisten AI lo buat narik ojek lebih cerdas.</p>
               </div>
               <div class="message bot-message">
-                <p>Mau ngapain nih? Bisa catat pendapatan, cek cuaca, cari titik gacor, bikin reminder, atau simpan catatan. Bilang aja!</p>
+                <p>
+                  Halo Bang! 👋 Bisa bantu:
+                  🎯 Ketik: "kejar target [angka]rb"
+                  📍 Ketik: "titik gacor sekarang"
+                  📊 Ketik: "rekap tarikan hari ini"
+                  🔔 Ketik: "ingetin [hal] [waktu]"
+                  📝 Ketik: "daftar belanja [item]"
+                  Atau chat bebas aja, Bang Jek ngerti! 💪
+                </p>
               </div>
               <div class="msg-meta">
                 <span>Bang Jek</span>
@@ -139,22 +151,23 @@
       <!-- Quick Actions -->
       <div class="quick-actions-bar" id="quick-actions-bar">
         <div class="qa-scroll">
-          <button class="qa-btn" id="qa-rekap"     onclick="sendQuick('Rekap pendapatan hari ini dong')">
+          <button class="qa-btn" id="qa-rekap" onclick="sendQuick('Rekap pendapatan hari ini dong')">
             💰 Rekap Tarikan
           </button>
-          <button class="qa-btn" id="qa-cuaca"     onclick="sendQuick('Cek cuaca Sudirman sekarang')">
+          <button class="qa-btn" id="qa-cuaca" onclick="sendQuick('Cek cuaca Sudirman sekarang')">
             🌤️ Cek Cuaca
           </button>
-          <button class="qa-btn" id="qa-gacor"     onclick="sendQuick('Titik gacor sekarang di mana?')">
+          <button class="qa-btn" id="qa-gacor" onclick="sendQuick('Titik gacor sekarang di mana?')">
             🔥 Titik Gacor
           </button>
-          <button class="qa-btn" id="qa-target"    onclick="sendQuick('Kalau mau dapet bersih 300 ribu hari ini, narik berapa trip?')">
+          <button class="qa-btn" id="qa-target"
+            onclick="sendQuick('Kalau mau dapet bersih 300 ribu hari ini, narik berapa trip?')">
             🎯 Hitung Target
           </button>
-          <button class="qa-btn" id="qa-servis"    onclick="sendQuick('Ingetin ganti oli motor besok jam 9 pagi')">
+          <button class="qa-btn" id="qa-servis" onclick="sendQuick('Ingetin ganti oli motor besok jam 9 pagi')">
             🔧 Jadwal Servis
           </button>
-          <button class="qa-btn" id="qa-catat"     onclick="sendQuick('Catat pendapatan 150 ribu dari trip ride tadi')">
+          <button class="qa-btn" id="qa-catat" onclick="sendQuick('Catat pendapatan 150 ribu dari trip ride tadi')">
             ✏️ Catat Income
           </button>
         </div>
@@ -163,20 +176,14 @@
       <!-- Input Area -->
       <div class="input-area">
         <div class="input-wrap">
-          <textarea
-            id="msg-input"
-            class="msg-input"
-            placeholder="Ketik pesan ke Bang Jek..."
-            rows="1"
-            maxlength="500"
-            autocomplete="off"
-            autocorrect="off"
-            spellcheck="false"
-          ></textarea>
+          <textarea id="msg-input" class="msg-input" placeholder="Ketik pesan ke Bang Jek..." rows="1" maxlength="500"
+            autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
           <button class="send-btn" id="send-btn" onclick="sendMessage()" aria-label="Kirim pesan">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" />
             </svg>
           </button>
         </div>
@@ -194,4 +201,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>
